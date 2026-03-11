@@ -1243,67 +1243,42 @@
             }
         }
 
-        // Procedural enemy texture (always works, no CORS)
-        let enemyTexture = null;
-        function getEnemyTexture() {
-            if (enemyTexture) return enemyTexture;
+        const textureLoader = new THREE.TextureLoader();
 
-            const canvas = document.createElement('canvas');
-            canvas.width = 256;
-            canvas.height = 256;
-            const ctx = canvas.getContext('2d');
-            ctx.clearRect(0, 0, 256, 256);
+        // Define skins and their weights (higher weight = more frequent)
+        const enemySkins = [
+            { src: 'enemi.jpg', weight: 60 },       // Original - 60% chance
+            { src: 'turkey.jpg', weight: 10 },      // Turkey (Sexy) - 10% chance
+            { src: 'old.jpg', weight: 10 },         // Old - 10% chance
+            { src: 'lgbt.jpg', weight: 10 },        // LGBT - 10% chance
+            { src: 'arab.jpg', weight: 10 }         // Arab - 10% chance
+        ];
 
-            // Head
-            ctx.fillStyle = '#c8a2c8';
-            ctx.beginPath();
-            ctx.ellipse(128, 100, 60, 80, 0, 0, Math.PI * 2);
-            ctx.fill();
+        // Preload textures to avoid lag when spawning
+        const loadedTextures = enemySkins.map(skin => ({
+            texture: textureLoader.load(skin.src),
+            weight: skin.weight
+        }));
 
-            // Beard
-            ctx.fillStyle = '#111';
-            ctx.beginPath();
-            ctx.ellipse(128, 160, 55, 30, 0, 0, Math.PI * 2);
-            ctx.fill();
+        const originalFallbackTexture = textureLoader.load('enemi.jpg');
 
-            // Eyes
-            ctx.fillStyle = '#000';
-            ctx.beginPath();
-            ctx.arc(100, 90, 15, 0, Math.PI * 2);
-            ctx.arc(156, 90, 15, 0, Math.PI * 2);
-            ctx.fill();
+        function getRandomSkinTexture() {
+            if (loadedTextures.length === 0) return originalFallbackTexture;
 
-            // White dots in eyes
-            ctx.fillStyle = '#fff';
-            ctx.beginPath();
-            ctx.arc(100, 90, 4, 0, Math.PI * 2);
-            ctx.arc(156, 90, 4, 0, Math.PI * 2);
-            ctx.fill();
+            const totalWeight = loadedTextures.reduce((sum, skin) => sum + skin.weight, 0);
+            let randomNum = Math.random() * totalWeight;
 
-            // Body
-            ctx.fillStyle = '#222';
-            ctx.fillRect(88, 180, 80, 80);
-
-            enemyTexture = new THREE.CanvasTexture(canvas);
-
-            // Try to load the real image as an upgrade (works on GitHub Pages)
-            const img = new Image();
-            img.onload = function () {
-                enemyTexture = new THREE.Texture(img);
-                enemyTexture.needsUpdate = true;
-                // Update all existing enemies with the real texture
-                for (let enemy of enemies) {
-                    enemy.sprite.material.map = enemyTexture;
-                    enemy.sprite.material.needsUpdate = true;
+            for (let skin of loadedTextures) {
+                randomNum -= skin.weight;
+                if (randomNum <= 0) {
+                    return skin.texture;
                 }
-            };
-            img.src = 'enemi.jpg';
-
-            return enemyTexture;
+            }
+            return loadedTextures[0].texture; // Fallback
         }
 
         function spawnEnemy(x, z) {
-            const tex = getEnemyTexture();
+            const tex = getRandomSkinTexture();
             const spriteMaterial = new THREE.SpriteMaterial({ map: tex, color: 0xffffff });
             let enemySprite = new THREE.Sprite(spriteMaterial);
             enemySprite.scale.set(20, 25, 1);
