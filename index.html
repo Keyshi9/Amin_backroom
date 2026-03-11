@@ -25,21 +25,92 @@
             justify-content: space-between;
         }
 
-        #staminaContainer {
-            margin: 20px;
-            width: 300px;
-            height: 20px;
-            background: rgba(0, 0, 0, 0.5);
-            border: 2px solid #555;
-            border-radius: 10px;
+        #statsContainer {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            pointer-events: none;
+            z-index: 8;
+        }
+
+        .bar-wrapper {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .bar-label {
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 0.8rem;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .bar-container {
+            width: 280px;
+            height: 12px;
+            background: rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 6px;
+            overflow: hidden;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+            position: relative;
+        }
+
+        .bar-fill {
+            height: 100%;
+            width: 100%;
+            border-radius: 4px;
+            transition: width 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+        }
+
+        #healthBar {
+            background: linear-gradient(90deg, #ff3333, #ff6666);
+            box-shadow: 0 0 15px rgba(255, 51, 51, 0.5);
         }
 
         #staminaBar {
+            background: linear-gradient(90deg, #00d2ff, #3a7bd5);
+            box-shadow: 0 0 15px rgba(0, 210, 255, 0.5);
+        }
+
+        /* Red flash animation for low health/stamina */
+        @keyframes pulse-red {
+            0% {
+                filter: brightness(1);
+            }
+
+            50% {
+                filter: brightness(1.5);
+            }
+
+            100% {
+                filter: brightness(1);
+            }
+        }
+
+        .bar-fill.critical {
+            animation: pulse-red 0.5s infinite;
+        }
+
+        .bar-gloss {
+            position: absolute;
+            top: 0;
+            left: 0;
             width: 100%;
-            height: 100%;
-            background: #fff;
-            border-radius: 8px;
-            transition: width 0.1s linear;
+            height: 50%;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0) 100%);
+            pointer-events: none;
         }
 
         .screen {
@@ -211,7 +282,8 @@
 
         #minimap {
             position: absolute;
-            top: 60px;
+            top: 140px;
+            /* Moins haut pour laisser de la place aux barres */
             left: 20px;
             background-color: rgba(0, 0, 0, 0.6);
             border: 2px solid rgba(255, 255, 255, 0.2);
@@ -342,12 +414,35 @@
     <div id="uiLayer">
         <canvas id="minimap" width="150" height="150"></canvas>
         <div id="damageOverlay"></div>
-        <div id="staminaContainer">
-            <div id="healthBar"
-                style="width: 100%; height: 10px; background: #ff3333; border-radius: 8px; margin-bottom: 2px; transition: width 0.1s linear;">
+
+        <div id="statsContainer">
+            <!-- Health Bar Section -->
+            <div class="bar-wrapper">
+                <div class="bar-label">
+                    <span>SANTÉ</span>
+                    <span id="healthValue">100%</span>
+                </div>
+                <div class="bar-container">
+                    <div id="healthBar" class="bar-fill">
+                        <div class="bar-gloss"></div>
+                    </div>
+                </div>
             </div>
-            <div id="staminaBar"></div>
+
+            <!-- Stamina Bar Section -->
+            <div class="bar-wrapper">
+                <div class="bar-label">
+                    <span>ENDURANCE</span>
+                    <span id="staminaValue">100%</span>
+                </div>
+                <div class="bar-container">
+                    <div id="staminaBar" class="bar-fill">
+                        <div class="bar-gloss"></div>
+                    </div>
+                </div>
+            </div>
         </div>
+
         <div id="crosshair"></div>
         <div id="killCount">💀 0</div>
     </div>
@@ -1272,13 +1367,13 @@
 
         const textureLoader = new THREE.TextureLoader();
 
-        // Define skins and their weights (higher weight = more frequent)
+        // Define skins (all equal weight now)
         const enemySkins = [
-            { src: 'enemi.jpg', weight: 60 },       // Original - 60% chance
-            { src: 'turkey.jpg', weight: 10 },      // Turkey (Sexy) - 10% chance
-            { src: 'old.jpg', weight: 10 },         // Old - 10% chance
-            { src: 'lgbt.jpg', weight: 10 },        // LGBT - 10% chance
-            { src: 'arab.jpg', weight: 10 }         // Arab - 10% chance
+            { src: 'enemi.jpg', weight: 20 },
+            { src: 'turkey.jpg', weight: 20 },
+            { src: 'old.jpg', weight: 20 },
+            { src: 'lgbt.jpg', weight: 20 },
+            { src: 'arab.jpg', weight: 20 }
         ];
 
         // Preload textures to avoid lag when spawning
@@ -1633,16 +1728,29 @@
         }
 
         function updateStaminaBar() {
-            document.getElementById('staminaBar').style.width = (stamina / maxStamina * 100) + '%';
+            const perc = Math.max(0, stamina / maxStamina * 100);
+            const el = document.getElementById('staminaBar');
+            el.style.width = perc + '%';
+            document.getElementById('staminaValue').textContent = Math.round(perc) + '%';
+
             if (stamina < 30) {
-                document.getElementById('staminaBar').style.background = 'red';
+                el.classList.add('critical');
             } else {
-                document.getElementById('staminaBar').style.background = 'white';
+                el.classList.remove('critical');
             }
         }
 
         function updateHealthDisplay() {
-            document.getElementById('healthBar').style.width = (health / maxHealth * 100) + '%';
+            const perc = Math.max(0, health / maxHealth * 100);
+            const el = document.getElementById('healthBar');
+            el.style.width = perc + '%';
+            document.getElementById('healthValue').textContent = Math.round(perc) + '%';
+
+            if (health < 30) {
+                el.classList.add('critical');
+            } else {
+                el.classList.remove('critical');
+            }
         }
 
         function gameOver() {
