@@ -461,9 +461,12 @@
         let reloadAnim = 0; // 0 = idle, >0 = animating
         let walkBobTime = 0;
 
-        // Gun animation targets
+        // 3D Gun animation targets
         const gunRestPos = new THREE.Vector3(0.32, -0.32, -0.55);
         const gunRestRot = new THREE.Euler(0, 0, 0);
+
+        // V5: Particles & Explosions
+        let particles = [];
 
         // Map (1 = Mur, 0 = Vide, 2 = Spawn Joueur, 3 = Spawn Ennemi, 4 = Sortie)
         const mapLayout = [
@@ -1006,6 +1009,30 @@
             noise.start();
         }
 
+        function playExplosion() {
+            if (!audioCtx || audioCtx.state !== 'running') return;
+            const bufferSize = audioCtx.sampleRate * 2.0;
+            const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+
+            const noise = audioCtx.createBufferSource();
+            noise.buffer = buffer;
+
+            const filter = audioCtx.createBiquadFilter();
+            filter.type = 'lowpass';
+            filter.frequency.value = 800;
+
+            const env = audioCtx.createGain();
+            env.gain.setValueAtTime(2.0, audioCtx.currentTime);
+            env.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 1.5);
+
+            noise.connect(filter);
+            filter.connect(env);
+            env.connect(masterGain);
+            noise.start();
+        }
+
         // ==================== VHS POST-PROCESSING SHADER ====================
         const VHSShader = {
             uniforms: {
@@ -1257,13 +1284,14 @@
         // Preload textures to avoid lag when spawning
         const loadedTextures = enemySkins.map(skin => ({
             texture: textureLoader.load(skin.src),
-            weight: skin.weight
+            weight: skin.weight,
+            type: skin.src
         }));
 
         const originalFallbackTexture = textureLoader.load('enemi.jpg');
 
         function getRandomSkinTexture() {
-            if (loadedTextures.length === 0) return originalFallbackTexture;
+            if (loadedTextures.length === 0) return { texture: originalFallbackTexture, type: 'enemi.jpg' };
 
             const totalWeight = loadedTextures.reduce((sum, skin) => sum + skin.weight, 0);
             let randomNum = Math.random() * totalWeight;
@@ -1271,20 +1299,22 @@
             for (let skin of loadedTextures) {
                 randomNum -= skin.weight;
                 if (randomNum <= 0) {
-                    return skin.texture;
+                    return { texture: skin.texture, type: skin.type };
                 }
             }
-            return loadedTextures[0].texture; // Fallback
+            return { texture: loadedTextures[0].texture, type: loadedTextures[0].type }; // Fallback
         }
 
         function spawnEnemy(x, z) {
-            const tex = getRandomSkinTexture();
+            const result = getRandomSkinTexture();
+            const tex = result.texture;
+            const type = result.type;
             const spriteMaterial = new THREE.SpriteMaterial({ map: tex, color: 0xffffff });
             let enemySprite = new THREE.Sprite(spriteMaterial);
             enemySprite.scale.set(20, 25, 1);
             enemySprite.position.set(x, 15, z);
             scene.add(enemySprite);
-            enemies.push({ sprite: enemySprite });
+            enemies.push({ sprite: enemySprite, type: type });
         }
 
         function spawnRandomEnemy() {
@@ -1395,8 +1425,17 @@
                 const dist = playerPos.distanceTo(enemyPos);
 
                 if (dist < 15) {
-                    health -= 40 * delta; // 40 HP per second drain
-                    isTakingDamage = true;
+                    if (enemy.type === 'arab.jpg') {
+                        createExplosion(enemyPos.x, enemyPos.y, enemyPos.z);
+                        // Remove enemy immediately
+                        scene.remove(enemy.sprite);
+                        enemies.splice(enemies.indexOf(enemy), 1);
+                        return; // Exit loop to avoid indexing issues after splice
+                    } else {
+                        health -= 40 * delta; // 40 HP per second drain
+                        isTakingDamage = true;
+                    }
+
                     if (health <= 0) {
                         gameOver();
                         return;
@@ -1443,7 +1482,6 @@
             const shootRay = new THREE.Raycaster();
             const center = new THREE.Vector2(0, 0);
             shootRay.setFromCamera(center, camera);
-
             const spriteList = enemies.map(e => e.sprite);
             const intersects = shootRay.intersectObjects(spriteList);
 
@@ -1451,7 +1489,13 @@
                 const hitSprite = intersects[0].object;
                 const idx = enemies.findIndex(e => e.sprite === hitSprite);
                 if (idx !== -1) {
+                    const enemy = enemies[idx];
                     hitsLanded++;
+
+                    if (enemy.type === 'arab.jpg') {
+                        createExplosion(enemy.sprite.position.x, enemy.sprite.position.y, enemy.sprite.position.z);
+                    }
+
                     scene.remove(hitSprite);
                     enemies.splice(idx, 1);
                     kills++;
@@ -1509,6 +1553,68 @@
                 isReloading = false;
                 updateAmmoDisplay();
             }, 1500);
+        }
+
+        // ==================== EXPLOSIONS & PARTICLES ====================
+        function createExplosion(x, y, z) {
+            playExplosion();
+
+            // Flash of light
+            const explosionLight = new THREE.PointLight(0xffaa00, 100, 100);
+            explosionLight.position.set(x, y, z);
+            scene.add(explosionLight);
+            setTimeout(() => scene.remove(explosionLight), 200);
+
+            // Create particles
+            const particleCount = 40;
+            const geo = new THREE.SphereGeometry(1, 4, 4);
+            const mat = new THREE.MeshBasicMaterial({ color: 0xff4400 });
+
+            for (let i = 0; i < particleCount; i++) {
+                const p = new THREE.Mesh(geo, mat);
+                p.position.set(x, y, z);
+                p.userData.vel = new THREE.Vector3(
+                    (Math.random() - 0.5) * 150,
+                    (Math.random() - 0.5) * 150,
+                    (Math.random() - 0.5) * 150
+                );
+                p.userData.life = 1.0;
+                scene.add(p);
+                particles.push(p);
+            }
+
+            // Damage nearby
+            const playerPos = controls.getObject().position;
+            const dist = playerPos.distanceTo(new THREE.Vector3(x, y, z));
+            if (dist < 40) {
+                health -= (1 - dist / 40) * 80; // Up to 80 damage
+                if (health <= 0) gameOver();
+            }
+
+            // Damage other enemies
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                const e = enemies[i];
+                const d = e.sprite.position.distanceTo(new THREE.Vector3(x, y, z));
+                if (d < 50 && d > 1) { // Don't kill self
+                    scene.remove(e.sprite);
+                    enemies.splice(i, 1);
+                    kills++;
+                    updateKillDisplay();
+                }
+            }
+        }
+
+        function updateParticles(delta) {
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.position.addScaledVector(p.userData.vel, delta);
+                p.userData.life -= delta * 2;
+                p.scale.setScalar(p.userData.life);
+                if (p.userData.life <= 0) {
+                    scene.remove(p);
+                    particles.splice(i, 1);
+                }
+            }
         }
 
         // ==================== HUD ====================
@@ -1781,6 +1887,7 @@
                 // Update enemies & bullets
                 updateEnemies(delta);
                 updateBullets(delta);
+                updateParticles(delta);
 
                 // Update HUD
                 drawMinimap();
