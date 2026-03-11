@@ -220,6 +220,113 @@
             pointer-events: none;
             box-shadow: 0 0 10px rgba(0, 0, 0, 0.8);
         }
+
+        /* --- Lore Cinematic Styles --- */
+        #loreScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #000;
+            z-index: 100;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .lore-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .lore-image {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            opacity: 0;
+            transition: opacity 1.5s ease-in-out;
+            filter: contrast(1.1) brightness(0.8) sepia(0.2);
+        }
+
+        .lore-image.active {
+            opacity: 1;
+        }
+
+        .lore-text-box {
+            position: absolute;
+            bottom: 10%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 80%;
+            text-align: center;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 20px;
+            border-top: 2px solid #ffcc00;
+            border-bottom: 2px solid #ffcc00;
+            color: #fff;
+            font-size: 1.8rem;
+            text-shadow: 2px 2px 4px #000;
+            opacity: 0;
+            transition: opacity 1s ease-in-out;
+            z-index: 101;
+            font-family: 'Courier New', Courier, monospace;
+        }
+
+        .lore-text-box.active {
+            opacity: 1;
+        }
+
+        .vhs-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%),
+                linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            background-size: 100% 4px, 3px 100%;
+            z-index: 102;
+            opacity: 0.3;
+        }
+
+        .glitch-effect {
+            animation: loreGlitch 0.2s infinite;
+        }
+
+        @keyframes loreGlitch {
+            0% {
+                transform: translate(0);
+            }
+
+            20% {
+                transform: translate(-5px, 5px);
+            }
+
+            40% {
+                transform: translate(-5px, -5px);
+            }
+
+            60% {
+                transform: translate(5px, 5px);
+            }
+
+            80% {
+                transform: translate(5px, -5px);
+            }
+
+            100% {
+                transform: translate(0);
+            }
+        }
     </style>
     <script type="importmap">
         {
@@ -254,6 +361,20 @@
         <p>ZQSD pour bouger. MAJ pour courir. ESPACE pour sauter. CLIC pour tirer. R pour recharger.</p>
         <p>Ne te laisse pas attraper par... LUI.</p>
         <button class="btn" id="startBtn">JOUER</button>
+    </div>
+
+    <!-- Lore Screen -->
+    <div id="loreScreen" class="hidden">
+        <div class="lore-container">
+            <img src="lore1.png" class="lore-image" id="loreImg1">
+            <img src="lore2.png" class="lore-image" id="loreImg2">
+            <img src="lore3.png" class="lore-image" id="loreImg3">
+            <img src="lore4.png" class="lore-image" id="loreImg4">
+            <img src="lore5.png" class="lore-image" id="loreImg5">
+            <img src="lore6.png" class="lore-image" id="loreImg6">
+            <div class="vhs-overlay"></div>
+            <div id="loreTextBox" class="lore-text-box"></div>
+        </div>
     </div>
 
     <!-- Game Over Screen -->
@@ -967,7 +1088,7 @@
             // UI Buttons
             document.getElementById('startBtn').addEventListener('click', () => {
                 initAudio();
-                controls.lock();
+                playLore();
             });
 
             document.getElementById('restartBtn').addEventListener('click', () => {
@@ -1461,6 +1582,85 @@
             isGameOver = true;
             controls.unlock();
             document.getElementById('winScreen').classList.remove('hidden');
+        }
+
+        // ==================== LORE SYSTEM ====================
+        function playLore() {
+            const loreScreen = document.getElementById('loreScreen');
+            const startScreen = document.getElementById('startScreen');
+            const textBox = document.getElementById('loreTextBox');
+
+            startScreen.classList.add('hidden');
+            loreScreen.classList.remove('hidden');
+
+            const scenes = [
+                { id: 'loreImg1', text: "Tout a commencé ce soir-là... Amin a découvert l'impensable." },
+                { id: 'loreImg2', text: "Sa femme l'avait trahi. La rage a remplacé son cœur." },
+                { id: 'loreImg3', text: "Il a pris son avion... une dernière course vers le néant." },
+                { id: 'loreImg4', text: "Mais au moment de l'impact, la réalité s'est déchirée." },
+                { id: 'loreImg5', text: "Il est tombé dans le vide jaune... loin de notre monde." },
+                { id: 'loreImg6', text: "Maintenant, il est l'entité. Il est la terreur de ces couloirs." }
+            ];
+
+            let currentScene = 0;
+
+            function showScene() {
+                if (currentScene >= scenes.length) {
+                    // Start Glitch Transition
+                    loreScreen.classList.add('glitch-effect');
+                    textBox.classList.remove('active');
+
+                    setTimeout(() => {
+                        loreScreen.classList.remove('glitch-effect');
+
+                        // Wait for a click to enter the game (fixes pointer lock issue)
+                        textBox.innerText = "-> CLIQUEZ POUR ENTRER <-";
+                        textBox.style.color = "#ff3333";
+                        textBox.style.border = "none";
+                        textBox.style.background = "transparent";
+                        textBox.style.fontSize = "2.5rem";
+                        textBox.style.cursor = "pointer";
+                        textBox.classList.add('active');
+
+                        // Hide all images except the last one (let it be a background)
+                        document.querySelectorAll('.lore-image').forEach(img => {
+                            if (img.id !== 'loreImg6') img.classList.remove('active');
+                        });
+
+                        const clickToStart = () => {
+                            loreScreen.removeEventListener('click', clickToStart);
+                            loreScreen.classList.add('hidden');
+                            controls.lock();
+                        };
+
+                        // Small delay to prevent accidental clicks
+                        setTimeout(() => {
+                            loreScreen.addEventListener('click', clickToStart);
+                            loreScreen.style.cursor = "pointer";
+                        }, 500);
+
+                    }, 1000);
+                    return;
+                }
+
+                // Hide all images
+                document.querySelectorAll('.lore-image').forEach(img => img.classList.remove('active'));
+                textBox.classList.remove('active');
+
+                // Show current image
+                setTimeout(() => {
+                    const scene = scenes[currentScene];
+                    const img = document.getElementById(scene.id);
+                    if (img) img.classList.add('active');
+                    textBox.innerText = scene.text;
+                    textBox.classList.add('active');
+
+                    currentScene++;
+                    setTimeout(showScene, 4000); // 4 seconds per scene
+                }, 500);
+            }
+
+            showScene();
         }
 
         // ==================== MINIMAP ====================
